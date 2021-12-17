@@ -50,16 +50,46 @@ router.post('/placeorder', fetchuser, checkkyc, async (req, res) => {
     }
 })
 
-// Route : Get all the open orders
+// Route 2 : Approve/ Disapprove an order by admin
 
-router.get('/openorders', fetchuser, querymen.middleware(), checkkyc, async (req, res) => {
+router.put('/approveorder/:id', fetchuser, async (req, res) => {
+    try {
+        const userId = req.user.id;
+        let user = await User.findById(userId).select("-password");
+        const permission = ac.can(user.role).updateAny('order');
+
+        let order = await PurchaseOrder.findById(req.params.id);
+
+        if (!order) {
+            return res.status(400).json('Order does not exists');
+        }
+
+        if (permission.granted) {
+            if (!order.approved) {
+                await PurchaseOrder.findByIdAndUpdate(req.params.id, { $set: { approved: true } })
+                return res.status(200).json(`Order with id ${order._id} has been approved`);
+            } else {
+                await PurchaseOrder.findByIdAndUpdate(req.params.id, { $set: { approved: false } })
+                return res.status(200).json(`Order with id ${order._id} has been disapproved`);
+            }
+        } else {
+            return res.status(400).json("You do not have the required permissions.");
+        }
+    } catch (error) {
+        res.status(500).json(error)
+    }
+})
+
+// Route 3 : Get all the open orders
+
+router.get('/openorders', fetchuser, querymen.middleware(), async (req, res) => {
     try {
         const userId = req.user.id;
         let query = req.querymen;
         let user = await User.findById(userId).select("-password");
         const permission = ac.can(user.role).readAny('order');
         if (permission.granted) {
-            let orders = await PurchaseOrder.find({ delivery_agent: "Not Assigned" }, query.query, query.cursor);
+            let orders = await PurchaseOrder.find({ delivery_agent: "Not Assigned", approved: true }, query.query, query.cursor);
             return res.status(200).json(orders);
         } else {
             return res.status(400).json("You do not have the required permissions");
@@ -69,7 +99,7 @@ router.get('/openorders', fetchuser, querymen.middleware(), checkkyc, async (req
     }
 })
 
-// Route 2: Deliver the order
+// Route 4: Deliver the order
 
 router.put('/deliverorder/:oid', fetchuser, async (req, res) => {
     try {
@@ -82,7 +112,7 @@ router.put('/deliverorder/:oid', fetchuser, async (req, res) => {
         }
         // let requestbody = Object.keys(req.body)
         // console.log(requestbody[0])
-        if (deliverypermission.granted && deliverypermission.attributes.includes('delivery_agent')) {
+        if (deliverypermission.granted && deliverypermission.attributes.includes('delivery_agent') && order.approved) {
             if (order.delivery_agent === 'Not Assigned') {
                 await PurchaseOrder.findByIdAndUpdate(req.params.oid, { $set: { delivery_agent: userId } });
                 return res.status(200).json("Order has been updated");
@@ -97,7 +127,7 @@ router.put('/deliverorder/:oid', fetchuser, async (req, res) => {
     }
 })
 
-// Route 3: Generate OTP to start an Order
+// Route 5: Generate OTP to start an Order
 
 router.post('/startorder', fetchuser, async (req, res) => {
     try {
@@ -109,60 +139,60 @@ router.post('/startorder', fetchuser, async (req, res) => {
             return res.status(400).json("Order does not exists");
         }
 
-       if (user.role === 'Delivery Agent'){
-        let otp = await OTP.findOne({ uid: userId, oid: req.body.oid });
+        if (user.role === 'Delivery Agent') {
+            let otp = await OTP.findOne({ uid: userId, oid: req.body.oid });
 
-        if (!otp && order.order_status === 'OPEN') {
-            otp = await new OTP({
-                uid: userId,
-                oid: order._id,
-                otp: (Math.floor(Math.random() * 10000) + 10000).toString().substring(1)
-            }).save()
-        } else if (otp && order.order_status === 'OPEN') {
-            await otp.delete();
-            otp = await new OTP({
-                uid: userId,
-                oid: order._id,
-                otp: (Math.floor(Math.random() * 10000) + 10000).toString().substring(1)
-            }).save()
+            if (!otp && order.order_status === 'OPEN') {
+                otp = await new OTP({
+                    uid: userId,
+                    oid: order._id,
+                    otp: (Math.floor(Math.random() * 10000) + 10000).toString().substring(1)
+                }).save()
+            } else if (otp && order.order_status === 'OPEN') {
+                await otp.delete();
+                otp = await new OTP({
+                    uid: userId,
+                    oid: order._id,
+                    otp: (Math.floor(Math.random() * 10000) + 10000).toString().substring(1)
+                }).save()
+            }
+
+            const message = `Your OTP for picking up orderId: ${req.body.oid} is ${otp.otp}`
+
+            let fromuser = await User.findById(order.from)
+
+            await sendSMS(message, fromuser.mobile_number)
+            return res.status(200).json(`Your OTP for picking up orderId: ${req.body.oid} is ${otp.otp}`);
+        } else {
+            return res.status(400).json("You do not have the required permissions");
         }
-
-        const message = `Your OTP for picking up orderId: ${req.body.oid} is ${otp.otp}`
-
-        let fromuser = await User.findById(order.from)
-
-        await sendSMS(message, fromuser.mobile_number)
-        return res.status(200).json(`Your OTP for picking up orderId: ${req.body.oid} is ${otp.otp}`);
-       } else {
-           return res.status(400).json("You do not have the required permissions");
-       }
     } catch (error) {
         res.status(500).json(error)
     }
 })
 
-// Route 4: Start an Order after successfully verifying the otp
+// Route 6: Start an Order after successfully verifying the otp
 
 router.post('/startorder/:oid', fetchuser, async (req, res) => {
     try {
         const userId = req.user.id;
         let user = await User.findById(userId).select("-password");
-        if (user.role === 'Delivery Agent'){
+        if (user.role === 'Delivery Agent') {
             let otp = await OTP.findOne({ oid: req.params.oid, otp: req.body.otp });
 
             if (!otp) {
                 return res.status(404).json("OTP invalid or has been expired");
             }
-    
+
             let order = await PurchaseOrder.findById(req.params.oid);
-    
+
             order.order_status = 'ONGOING';
-    
+
             await order.save();
             await otp.delete();
-    
+
             // Message
-    
+
             return res.status(200).json({ status: "Your order has been successfully accepted by our delivery agent" })
         } else {
             return res.status(400).json("You do not have the required permissions");
@@ -172,7 +202,7 @@ router.post('/startorder/:oid', fetchuser, async (req, res) => {
     }
 })
 
-// Route 5: Generating OTP for completion of an purchaseorder
+// Route 7: Generating OTP for completion of an purchaseorder
 
 router.post('/completeorder', fetchuser, async (req, res) => {
     try {
@@ -184,31 +214,31 @@ router.post('/completeorder', fetchuser, async (req, res) => {
             return res.status(400).json("Order does not exists");
         }
 
-        if (user.role === 'Delivery Agent'){
+        if (user.role === 'Delivery Agent') {
             let otp = await OTP.findOne({ uid: userId, oid: req.body.oid });
 
-        if (!otp && order.order_status === 'ONGOING') {
-            otp = await new OTP({
-                uid: userId,
-                oid: order._id,
-                otp: (Math.floor(Math.random() * 10000) + 10000).toString().substring(1)
-            }).save()
-        } else if (otp && order.order_status === 'ONGOING') {
-            await otp.delete();
-            otp = await new OTP({
-                uid: userId,
-                oid: order._id,
-                otp: (Math.floor(Math.random() * 10000) + 10000).toString().substring(1)
-            }).save()
-        }
+            if (!otp && order.order_status === 'ONGOING') {
+                otp = await new OTP({
+                    uid: userId,
+                    oid: order._id,
+                    otp: (Math.floor(Math.random() * 10000) + 10000).toString().substring(1)
+                }).save()
+            } else if (otp && order.order_status === 'ONGOING') {
+                await otp.delete();
+                otp = await new OTP({
+                    uid: userId,
+                    oid: order._id,
+                    otp: (Math.floor(Math.random() * 10000) + 10000).toString().substring(1)
+                }).save()
+            }
 
-        const message = `Your OTP for delivering orderId: ${req.body.oid} is ${otp.otp}`;
+            const message = `Your OTP for delivering orderId: ${req.body.oid} is ${otp.otp}`;
 
-        let touser = await User.findById(order.to);
+            let touser = await User.findById(order.to);
 
-        await sendSMS(message, touser.mobile_number);
+            await sendSMS(message, touser.mobile_number);
 
-        return res.status(200).json(`Your OTP for delivering orderId: ${req.body.oid} is ${otp.otp}`);
+            return res.status(200).json(`Your OTP for delivering orderId: ${req.body.oid} is ${otp.otp}`);
         } else {
             return res.status(400).json("You do not have the required permissions");
         }
@@ -217,30 +247,30 @@ router.post('/completeorder', fetchuser, async (req, res) => {
     }
 })
 
-// Route 6: Completing an order after successfully verifying the OTP
+// Route 8: Completing an order after successfully verifying the OTP
 
 router.post('/completeorder/:oid', fetchuser, async (req, res) => {
     try {
         const userId = req.user.id;
         let user = await User.findById(userId).select("-password");
-        
-        if (user.role === 'Delivery Agent'){
+
+        if (user.role === 'Delivery Agent') {
             let otp = await OTP.findOne({ oid: req.params.oid, otp: req.body.otp });
 
-        if (!otp) {
-            return res.status(404).json("OTP invalid or has been expired");
-        }
+            if (!otp) {
+                return res.status(404).json("OTP invalid or has been expired");
+            }
 
-        let order = await PurchaseOrder.findById(req.params.oid);
+            let order = await PurchaseOrder.findById(req.params.oid);
 
-        order.order_status = 'DELIVERED';
+            order.order_status = 'DELIVERED';
 
-        await order.save();
-        await otp.delete();
+            await order.save();
+            await otp.delete();
 
-        // Message
+            // Message
 
-        return res.status(200).json({ status: "Your order has been successfully delivered to you by our delivery agent" })
+            return res.status(200).json({ status: "Your order has been successfully delivered to you by our delivery agent" })
         } else {
             return res.status(400).json("You do not have the required permissions");
         }
@@ -249,7 +279,7 @@ router.post('/completeorder/:oid', fetchuser, async (req, res) => {
     }
 })
 
-// Route 7: Get All Orders
+// Route 9: Get All Orders
 
 router.get('/orders', fetchuser, querymen.middleware(), async (req, res) => {
     try {
@@ -270,7 +300,7 @@ router.get('/orders', fetchuser, querymen.middleware(), async (req, res) => {
     }
 })
 
-// Route 8: Get a Order
+// Route 10: Get a Order
 
 router.get('/getorder/:id', fetchuser, async (req, res) => {
     try {
@@ -281,7 +311,26 @@ router.get('/getorder/:id', fetchuser, async (req, res) => {
     }
 })
 
-// Route 8: Delete an Order
+// Route 11: Update a Order
+
+router.put('/updateorder/:id', fetchuser, async (req, res) => {
+    try {
+        const userId = req.user.id;
+        let user = await User.findById(userId).select("-password");
+        const permission = ac.can(user.role).updateAny('order');
+
+        if (permission.granted) {
+            await PurchaseOrder.findByIdAndUpdate(req.params.id, { $set: req.body });
+            return res.status(200).json("Order has been Updated");
+        } else {
+            return res.status(400).json("You do not have the required permissions");
+        }
+    } catch (error) {
+        res.status(500).json(error);
+    }
+})
+
+// Route 12: Delete an Order
 
 router.delete('/:oid', fetchuser, async (req, res) => {
     try {
@@ -312,7 +361,7 @@ router.delete('/:oid', fetchuser, async (req, res) => {
     }
 })
 
-// Route 10: upload image/pdf
+// Route 13: upload image/pdf
 
 router.post("/file/upload", upload.single('file'), async (req, res) => {
     if (!req.file)
@@ -323,7 +372,7 @@ router.post("/file/upload", upload.single('file'), async (req, res) => {
     res.status(200).json(imageUrl);
 })
 
-//Route 11: Get image/pdf
+//Route 14: Get image/pdf
 
 router.get("/file/:filename", async (req, res) => {
     try {
