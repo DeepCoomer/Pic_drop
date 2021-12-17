@@ -108,7 +108,7 @@ router.post('/startorder', fetchuser, async (req, res) => {
             return res.status(400).json("Order does not exists");
         }
 
-        let otp = await OTP.findOne({ uid: order.uid, oid: req.body.oid });
+        let otp = await OTP.findOne({ uid: userId, oid: req.body.oid });
 
         if (!otp && order.order_status === 'OPEN') {
             otp = await new OTP({
@@ -173,7 +173,7 @@ router.post('/completeorder', fetchuser, async (req, res) => {
             return res.status(400).json("Order does not exists");
         }
 
-        let otp = await OTP.findOne({ uid: order.uid, oid: req.body.oid });
+        let otp = await OTP.findOne({ uid: userId, oid: req.body.oid });
 
         if (!otp && order.order_status === 'ONGOING') {
             otp = await new OTP({
