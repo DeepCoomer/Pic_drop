@@ -291,9 +291,9 @@ router.get('/orders', fetchuser, querymen.middleware(), async (req, res) => {
             let orders = await PurchaseOrder.find(query.query, query.select, query.cursor);
             return res.status(200).json(orders);
         } else {
-            let userorders = await PurchaseOrder.find({ uid: userId }, query.query, query.cursor);
+            let fromorders = await PurchaseOrder.find({ from: userId }, query.query, query.cursor);
             let toorders = await PurchaseOrder.find({ to: userId }, query.query, query.cursor);
-            res.status(200).json(toorders.concat(userorders));
+            res.status(200).json(toorders.concat(fromorders));
         }
     } catch (error) {
         res.status(500).json(error);
