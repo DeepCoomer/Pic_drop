@@ -230,4 +230,16 @@ router.delete('/:id', fetchuser, async (req, res) => {
     }
 })
 
+// Route 9: Get User from Id
+
+router.get('/:id', fetchuser, async (req, res) => {
+    try {
+        const userId = req.user.id;
+        let user = await User.findById(req.params.id);
+        res.status(200).json(user);
+    } catch (error) {
+        res.status(500).json(error)
+    }
+})
+
 export default router;
