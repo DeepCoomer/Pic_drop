@@ -242,4 +242,35 @@ router.get('/:id', fetchuser, async (req, res) => {
     }
 })
 
+// Route 10: Verify Kyc
+
+router.put('/verify/:id', fetchuser, async (req, res) => {
+    try {
+        const userId = req.user.id;
+        let user = await User.findById(userId).select("-password");
+        const permission = ac.can(user.role).updateAny('profile');
+
+        let updatekyc = await User.findById(req.params.id);
+
+        if (!updatekyc) {
+            return res.status(400).json("User does not exist");
+        }
+
+        if (permission.granted) {
+            updatekyc = await User.findById(req.params.id);
+            if (!updatekyc.kyc_verified) {
+                await User.findByIdAndUpdate(req.params.id, { $set: { kyc_verified: true } });
+                return res.status(200).json("User Kyc has been updated");
+            } else {
+                await User.findByIdAndUpdate(req.params.id, { $set: { kyc_verified: false } });
+                return res.status(200).json("User Kyc has been updated");
+            }
+        } else {
+            return res.status(400).json("You do not have the required permissions");
+        }
+    } catch (error) {
+        res.status(500).json(error);
+    }
+})
+
 export default router;
