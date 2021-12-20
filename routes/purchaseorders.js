@@ -112,7 +112,7 @@ router.put('/deliverorder/:oid', fetchuser, async (req, res) => {
         }
         // let requestbody = Object.keys(req.body)
         // console.log(requestbody[0])
-        if (deliverypermission.granted && deliverypermission.attributes.includes('delivery_agent') && order.approved) {
+        if (deliverypermission.granted && deliverypermission.attributes.includes('delivery_agent')) {
             if (order.delivery_agent === 'Not Assigned') {
                 await PurchaseOrder.findByIdAndUpdate(req.params.oid, { $set: { delivery_agent: userId } });
                 return res.status(200).json("Order has been updated");
@@ -379,6 +379,24 @@ router.get("/file/:filename", async (req, res) => {
         const file = await gfs.files.findOne({ filename: req.params.filename });
         const readStream = gfs.createReadStream(file.filename);
         readStream.pipe(res);
+    } catch (error) {
+        res.status(500).json(error);
+    }
+})
+
+// Route 15: Get order of the assigned delivery agent
+
+router.get("/deliveryagent/:id", fetchuser, async (req, res) => {
+    try {
+        const userId = req.user.id;
+        let user = await User.findById(userId).select("-password");
+        const permission = ac.can(user.role).readAny('order');
+        if (permission.granted && user.role === 'Delivery Agent') {
+            let orders = await PurchaseOrder.find({ delivery_agent: req.params.id });
+            return res.status(200).json(orders);
+        } else {
+            return res.status(400).json("You do not have the required permissions");
+        }
     } catch (error) {
         res.status(500).json(error);
     }

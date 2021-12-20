@@ -117,8 +117,11 @@ router.post('/login', passport.authenticate('local'), async (req, res) => {
     // const refreshData = req.user._id req.cookies['connect.sid']
 
     const authtoken = jwt.sign(data, JWT_Secret);
-    console.log(req.user);
-    res.status(200).json({ access_token: authtoken, refresh_token: refreshtoken });
+    // console.log(req.user);
+
+    const usser = await User.findById(userid).select("-password")
+
+    res.status(200).json({ user: usser, access_token: authtoken, refresh_token: refreshtoken });
 
 })
 
@@ -275,12 +278,49 @@ router.put('/verify/:id', fetchuser, async (req, res) => {
 
 router.get('/:shopname', fetchuser, async (req, res) => {
     try {
-        let shopname = await User.findOne({shop_name: req.params.shopname});
+        let shopname = await User.findOne({ shop_name: req.params.shopname });
 
-        if(shopname){
+        if (shopname) {
             return res.status(200).json(`${req.params.shopname} exists in our system`)
         } else {
             return res.status(400).json(`${req.params.shopname} does not exists in our system`)
+        }
+    } catch (error) {
+        res.status(500).json(error);
+    }
+})
+
+// Route 12: Creating User by Admin
+
+router.post('/admin/createuser', fetchuser, async (req, res) => {
+    try {
+        const userId = req.user.id;
+        let user = await User.findById(userId).select("-password");
+        const permission = ac.can(user.role).createAny('profile');
+        if (permission.granted) {
+            let user = await User.findOne({ email: req.body.email });
+            if (user) {
+                return res.status(400).json("User Already Exists");
+            }
+            const salt = await bcrypt.genSalt(10);
+            const hashedPassword = await bcrypt.hash(req.body.password, salt)
+            user = await new User({
+                firstname: req.body.firstname,
+                lastname: req.body.lastname,
+                password: hashedPassword,
+                role: req.body.role,
+                category: req.body.category,
+                shop_name: req.body.shop_name,
+                mobile_number: req.body.mobile_number,
+                email: req.body.email,
+                address: req.body.address,
+                shop_photo: req.body.shop_photo,
+                kyc_documents: req.body.kyc_documents
+            });
+            await user.save();
+            return res.status(200).json({ user_id: user._id })
+        } else {
+            return res.status(400).json("You do not have the required permissions");
         }
     } catch (error) {
         res.status(500).json(error);
