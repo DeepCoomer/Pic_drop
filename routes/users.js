@@ -273,4 +273,20 @@ router.put('/verify/:id', fetchuser, async (req, res) => {
     }
 })
 
+// Route 11: Check whether shop name exists or not
+
+router.get('/:shopname', fetchuser, async (req, res) => {
+    try {
+        let shopname = await User.findOne({shop_name: req.params.shopname});
+
+        if(shopname){
+            return res.status(200).json(`${req.params.shopname} exists in our system`)
+        } else {
+            return res.status(400).json(`${req.params.shopname} does not exists in our system`)
+        }
+    } catch (error) {
+        res.status(500).json(error);
+    }
+})
+
 export default router;
