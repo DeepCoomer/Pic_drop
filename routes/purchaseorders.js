@@ -52,33 +52,33 @@ router.post('/placeorder', fetchuser, checkkyc, async (req, res) => {
 
 // Route 2 : Approve/ Disapprove an order by admin
 
-router.put('/approveorder/:id', fetchuser, async (req, res) => {
-    try {
-        const userId = req.user.id;
-        let user = await User.findById(userId).select("-password");
-        const permission = ac.can(user.role).updateAny('order');
+// router.put('/approveorder/:id', fetchuser, async (req, res) => {
+//     try {
+//         const userId = req.user.id;
+//         let user = await User.findById(userId).select("-password");
+//         const permission = ac.can(user.role).updateAny('order');
 
-        let order = await PurchaseOrder.findById(req.params.id);
+//         let order = await PurchaseOrder.findById(req.params.id);
 
-        if (!order) {
-            return res.status(400).json('Order does not exists');
-        }
+//         if (!order) {
+//             return res.status(400).json('Order does not exists');
+//         }
 
-        if (permission.granted) {
-            if (!order.approved) {
-                await PurchaseOrder.findByIdAndUpdate(req.params.id, { $set: { approved: true } })
-                return res.status(200).json(`Order with id ${order._id} has been approved`);
-            } else {
-                await PurchaseOrder.findByIdAndUpdate(req.params.id, { $set: { approved: false } })
-                return res.status(200).json(`Order with id ${order._id} has been disapproved`);
-            }
-        } else {
-            return res.status(400).json("You do not have the required permissions.");
-        }
-    } catch (error) {
-        res.status(500).json(error)
-    }
-})
+//         if (permission.granted) {
+//             if (!order.approved) {
+//                 await PurchaseOrder.findByIdAndUpdate(req.params.id, { $set: { approved: true } })
+//                 return res.status(200).json(`Order with id ${order._id} has been approved`);
+//             } else {
+//                 await PurchaseOrder.findByIdAndUpdate(req.params.id, { $set: { approved: false } })
+//                 return res.status(200).json(`Order with id ${order._id} has been disapproved`);
+//             }
+//         } else {
+//             return res.status(400).json("You do not have the required permissions.");
+//         }
+//     } catch (error) {
+//         res.status(500).json(error)
+//     }
+// })
 
 // Route 3 : Get all the open orders
 
@@ -89,7 +89,7 @@ router.get('/openorders', fetchuser, querymen.middleware(), async (req, res) => 
         let user = await User.findById(userId).select("-password");
         const permission = ac.can(user.role).readAny('order');
         if (permission.granted) {
-            let orders = await PurchaseOrder.find({ delivery_agent: "Not Assigned", approved: true }, query.query, query.cursor);
+            let orders = await PurchaseOrder.find({ delivery_agent: "Not Assigned" }, query.query, query.cursor);
             return res.status(200).json(orders);
         } else {
             return res.status(400).json("You do not have the required permissions");

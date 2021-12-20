@@ -56,10 +56,6 @@ const PurchaseOrderSchema = new mongoose.Schema({
     delivery_agent: {
         type: String,
         default: 'Not Assigned'
-    },
-    approved:{
-        type: Boolean,
-        default: false
     }
 }, {timestamps: true})
 

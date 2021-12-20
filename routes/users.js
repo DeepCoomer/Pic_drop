@@ -110,8 +110,6 @@ router.post('/login', passport.authenticate('local'), async (req, res) => {
 
     const cookietimestamp = cookiedata + timestamp
 
-    console.log(cookietimestamp)
-
     const resfreshData = userid.concat(cookietimestamp);
 
     const refreshtoken = await bcrypt.hash(resfreshData, salt)
@@ -119,7 +117,7 @@ router.post('/login', passport.authenticate('local'), async (req, res) => {
     // const refreshData = req.user._id req.cookies['connect.sid']
 
     const authtoken = jwt.sign(data, JWT_Secret);
-    // console.log(req.user.id);
+    console.log(req.user);
     res.status(200).json({ access_token: authtoken, refresh_token: refreshtoken });
 
 })
